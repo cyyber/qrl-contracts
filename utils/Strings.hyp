@@ -14,7 +14,7 @@ library Strings {
     using SafeCast for *;
 
     bytes16 private constant HEX_DIGITS = "0123456789abcdef";
-    uint8 private constant ADDRESS_LENGTH = 20;
+    uint8 private constant ADDRESS_LENGTH = 48;
     uint256 private constant SPECIAL_CHARS_LOOKUP =
         (1 << 0x08) | // backspace
             (1 << 0x09) | // tab
@@ -96,34 +96,65 @@ library Strings {
         return string(buffer);
     }
 
-    /**
-     * @dev Converts an `address` with fixed length of 20 bytes to its not checksummed ASCII `string` hexadecimal
-     * representation.
-     */
+    // 48B-aware variant — uint256 only holds 32 bytes so a post-quantum
+    // address (48B / 384b) cannot round-trip through it without truncation.
+    // Distinct name avoids ambiguous overload resolution against uint256
+    // (which implicitly widens to uint384).
+    function toHexStringWide(uint384 value, uint256 length) internal pure returns (string memory) {
+        uint384 localValue = value;
+        bytes memory buffer = new bytes(2 * length + 2);
+        buffer[0] = "0";
+        buffer[1] = "x";
+        for (uint256 i = 2 * length + 1; i > 1; --i) {
+            buffer[i] = HEX_DIGITS[uint256(localValue & 0xf)];
+            localValue >>= 4;
+        }
+        if (localValue != 0) {
+            revert StringsInsufficientHexLength(uint256(localValue), length);
+        }
+        return string(buffer);
+    }
+
     function toHexString(address addr) internal pure returns (string memory) {
-        return toHexString(uint256(uint160(addr)), ADDRESS_LENGTH);
+        return toHexStringWide(uint384(addr), ADDRESS_LENGTH);
     }
 
     /**
-     * @dev Converts an `address` with fixed length of 20 bytes to its checksummed ASCII `string` hexadecimal
-     * representation, according to EIP-55.
+     * @dev QIP-55 checksummed hex representation of a 48-byte address (96 hex chars).
+     *      Mirrors the de-facto JS implementation in
+     *      web3.js/packages/web3-validator/src/validation/address.ts and
+     *      web3.js/packages/web3-utils/src/converters.ts (toChecksumAddress).
+     *
+     *      The single keccak256 of the 96-char lowercased address yields 64
+     *      hex nibbles of hash output, which is enough to checksum address
+     *      positions 0..63 only. Positions 64..95 are emitted lowercase
+     *      (this function never uppercases them) and the matching JS
+     *      validator silently accepts ANY case for those positions because
+     *      `parseInt(addressHash[i], 16)` returns NaN past index 63.
+     *      See MIGRATION-QIP55.md for the full rationale and the planned
+     *      "full-coverage" follow-up (two-keccak domain-separated scheme).
      */
     function toChecksumHexString(address addr) internal pure returns (string memory) {
-        bytes memory buffer = bytes(toHexString(addr));
+        bytes memory buffer = bytes(toHexString(addr));   // "0x" + 96 lowercase hex chars
 
-        // hash the hex part of buffer (skip length + 2 bytes, length 40)
+        // Hash the full 96 lowercase hex chars (skip 32B length header + "0x" prefix).
         uint256 hashValue;
         assembly ("memory-safe") {
-            hashValue := shr(96, keccak256(add(buffer, 0x22), 40))
+            hashValue := keccak256(add(buffer, 0x22), 96)
         }
 
-        for (uint256 i = 41; i > 1; --i) {
+        // Walk address positions 0..95. Buffer indices 2..97 host the hex chars
+        // (index 0,1 are "0", "x"). For each step we consume the top nibble of
+        // hashValue and shift left by 4. After 64 iterations hashValue == 0,
+        // so positions 64..95 see nibble 0 → no case shift, stay lowercase.
+        for (uint256 i = 2; i < 98; ++i) {
+            uint256 nibble = hashValue >> 252;
             // possible values for buffer[i] are 48 (0) to 57 (9) and 97 (a) to 102 (f)
-            if (hashValue & 0xf > 7 && uint8(buffer[i]) > 96) {
+            if (nibble > 7 && uint8(buffer[i]) > 96) {
                 // case shift by xoring with 0x20
                 buffer[i] ^= 0x20;
             }
-            hashValue >>= 4;
+            hashValue <<= 4;
         }
         return string(buffer);
     }
@@ -408,9 +439,9 @@ library Strings {
 
         // check that input is the correct length
         if (end - begin == expectedLength) {
-            // length guarantees that this does not overflow, and value is at most type(uint160).max
+            // length guarantees that this does not overflow, and value is at most type(uint384).max
             (bool s, uint256 v) = _tryParseHexUintUncheckedBounds(input, begin, end);
-            return (s, address(uint160(v)));
+            return (s, address(uint384(v)));
         } else {
             return (false, address(0));
         }
