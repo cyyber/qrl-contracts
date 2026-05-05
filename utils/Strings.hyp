@@ -120,43 +120,11 @@ library Strings {
     }
 
     /**
-     * @dev QIP-55 checksummed hex representation of a 48-byte address (96 hex chars).
-     *      Mirrors the de-facto JS implementation in
-     *      web3.js/packages/web3-validator/src/validation/address.ts and
-     *      web3.js/packages/web3-utils/src/converters.ts (toChecksumAddress).
-     *
-     *      The single keccak256 of the 96-char lowercased address yields 64
-     *      hex nibbles of hash output, which is enough to checksum address
-     *      positions 0..63 only. Positions 64..95 are emitted lowercase
-     *      (this function never uppercases them) and the matching JS
-     *      validator silently accepts ANY case for those positions because
-     *      `parseInt(addressHash[i], 16)` returns NaN past index 63.
-     *      See MIGRATION-QIP55.md for the full rationale and the planned
-     *      "full-coverage" follow-up (two-keccak domain-separated scheme).
+     * @dev Canonical hex representation of a 48-byte address (96 lowercase hex chars).
+     *      QRL addresses do not embed an EIP-55/QIP-55 mixed-case checksum.
      */
     function toChecksumHexString(address addr) internal pure returns (string memory) {
-        bytes memory buffer = bytes(toHexString(addr));   // "0x" + 96 lowercase hex chars
-
-        // Hash the full 96 lowercase hex chars (skip 32B length header + "0x" prefix).
-        uint256 hashValue;
-        assembly ("memory-safe") {
-            hashValue := keccak256(add(buffer, 0x22), 96)
-        }
-
-        // Walk address positions 0..95. Buffer indices 2..97 host the hex chars
-        // (index 0,1 are "0", "x"). For each step we consume the top nibble of
-        // hashValue and shift left by 4. After 64 iterations hashValue == 0,
-        // so positions 64..95 see nibble 0 → no case shift, stay lowercase.
-        for (uint256 i = 2; i < 98; ++i) {
-            uint256 nibble = hashValue >> 252;
-            // possible values for buffer[i] are 48 (0) to 57 (9) and 97 (a) to 102 (f)
-            if (nibble > 7 && uint8(buffer[i]) > 96) {
-                // case shift by xoring with 0x20
-                buffer[i] ^= 0x20;
-            }
-            hashValue <<= 4;
-        }
-        return string(buffer);
+        return toHexString(addr);
     }
 
     /**
@@ -392,11 +360,36 @@ library Strings {
         return (true, result);
     }
 
+    function _tryParseHexUint384UncheckedBounds(
+        string memory input,
+        uint256 begin,
+        uint256 end
+    ) private pure returns (bool success, uint384 value) {
+        bytes memory buffer = bytes(input);
+
+        // skip 0x prefix if present
+        bool hasPrefix = (end > begin + 1) && bytes2(_unsafeReadBytesOffset(buffer, begin)) == bytes2("0x"); // don't do out-of-bound (possibly unsafe) read if sub-string is empty
+        uint256 offset = hasPrefix.toUint() * 2;
+
+        uint384 result = 0;
+        for (uint256 i = begin + offset; i < end; ++i) {
+            uint8 chr = _tryParseChr(bytes1(_unsafeReadBytesOffset(buffer, i)));
+            if (chr > 15) return (false, 0);
+            result *= 16;
+            unchecked {
+                // Multiplying by 16 is equivalent to a shift of 4 bits (with additional overflow check).
+                // This guarantees that adding a value < 16 will not cause an overflow, hence the unchecked.
+                result += uint384(chr);
+            }
+        }
+        return (true, result);
+    }
+
     /**
      * @dev Parse a hexadecimal string (with or without "0x" prefix), and returns the value as an `address`.
      *
      * Requirements:
-     * - The string must be formatted as `(0x)?[0-9a-fA-F]{40}`
+     * - The string must be formatted as `(0x)?[0-9a-fA-F]{96}`
      */
     function parseAddress(string memory input) internal pure returns (address) {
         return parseAddress(input, 0, bytes(input).length);
@@ -407,7 +400,7 @@ library Strings {
      * `end` (excluded).
      *
      * Requirements:
-     * - The substring must be formatted as `(0x)?[0-9a-fA-F]{40}`
+     * - The substring must be formatted as `(0x)?[0-9a-fA-F]{96}`
      */
     function parseAddress(string memory input, uint256 begin, uint256 end) internal pure returns (address) {
         (bool success, address value) = tryParseAddress(input, begin, end);
@@ -435,13 +428,13 @@ library Strings {
         if (end > bytes(input).length || begin > end) return (false, address(0));
 
         bool hasPrefix = (end > begin + 1) && bytes2(_unsafeReadBytesOffset(bytes(input), begin)) == bytes2("0x"); // don't do out-of-bound (possibly unsafe) read if sub-string is empty
-        uint256 expectedLength = 40 + hasPrefix.toUint() * 2;
+        uint256 expectedLength = ADDRESS_LENGTH * 2 + hasPrefix.toUint() * 2;
 
         // check that input is the correct length
         if (end - begin == expectedLength) {
             // length guarantees that this does not overflow, and value is at most type(uint384).max
-            (bool s, uint256 v) = _tryParseHexUintUncheckedBounds(input, begin, end);
-            return (s, address(uint384(v)));
+            (bool s, uint384 v) = _tryParseHexUint384UncheckedBounds(input, begin, end);
+            return (s, address(v));
         } else {
             return (false, address(0));
         }
