@@ -1,11 +1,11 @@
 # QIP-55 mixed-case checksum status
 
-This document supersedes the earlier migration note that proposed an EIP-55-style mixed-case checksum for QRL 48-byte addresses.
+This document supersedes the earlier migration note that proposed an EIP-55-style mixed-case checksum for QRL addresses.
 
 Final address policy:
 
-- QRL addresses are 48 bytes.
-- Text form is `Q` followed by 96 hexadecimal characters.
+- QRL addresses are 64 bytes.
+- Text form is `Q` followed by 128 hexadecimal characters.
 - Canonical output is lowercase.
 - Address validation is structural only.
 - No EIP-55/QIP-55 mixed-case checksum is embedded in the address.
