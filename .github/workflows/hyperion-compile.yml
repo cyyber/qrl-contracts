@@ -33,3 +33,8 @@ jobs:
         env:
           HYPC: /tmp/hypc-js/dist/hypc.js
         run: npm run compile
+
+      - name: Test address string helpers
+        env:
+          HYPC: /tmp/hypc-js/dist/hypc.js
+        run: npm test
