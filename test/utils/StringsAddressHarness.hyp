@@ -1,0 +1,60 @@
+// SPDX-License-Identifier: MIT
+
+pragma hyperion >=0.0;
+
+import {Strings} from "../../utils/Strings.hyp";
+
+contract StringsAddressHarness {
+    function roundTripCanonical(address addr) public pure returns (bool) {
+        return Strings.parseAddress(Strings.toHexString(addr)) == addr;
+    }
+
+    function checksumAliasMatchesHex(address addr) public pure returns (bool) {
+        return Strings.equal(Strings.toChecksumHexString(addr), Strings.toHexString(addr));
+    }
+
+    function parseCanonicalLowercase() public pure returns (address) {
+        return Strings.parseAddress(
+            "Q0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+    }
+
+    function parseUppercaseHex() public pure returns (address) {
+        return Strings.parseAddress(
+            "Q0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF"
+        );
+    }
+
+    function rejectShortAddress() public pure returns (bool) {
+        (bool success, ) = Strings.tryParseAddress("Q00");
+        return !success;
+    }
+
+    function rejectInvalidCharacter() public pure returns (bool) {
+        (bool success, ) = Strings.tryParseAddress(
+            "Q0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg"
+        );
+        return !success;
+    }
+
+    function rejectLowercasePrefix() public pure returns (bool) {
+        (bool success, ) = Strings.tryParseAddress(
+            "q0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+        return !success;
+    }
+
+    function rejectOxPrefix() public pure returns (bool) {
+        (bool success, ) = Strings.tryParseAddress(
+            "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+        return !success;
+    }
+
+    function rejectBareHex() public pure returns (bool) {
+        (bool success, ) = Strings.tryParseAddress(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+        return !success;
+    }
+}

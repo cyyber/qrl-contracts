@@ -1,0 +1,40 @@
+name: Hyperion Compile
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  hypc:
+    name: hypc
+    runs-on: ubuntu-latest
+    env:
+      HYPC_JS_REF: fdef38670119db396c558bd3bda87f64c4246fef
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build Hyperion compiler
+        run: |
+          git init /tmp/hypc-js
+          git -C /tmp/hypc-js remote add origin https://github.com/theQRL/hypc-js.git
+          git -C /tmp/hypc-js fetch --depth 1 origin "$HYPC_JS_REF"
+          git -C /tmp/hypc-js checkout --detach FETCH_HEAD
+          npm --prefix /tmp/hypc-js ci
+          npm --prefix /tmp/hypc-js run build
+          /tmp/hypc-js/dist/hypc.js --version
+
+      - name: Compile Hyperion sources
+        env:
+          HYPC: /tmp/hypc-js/dist/hypc.js
+        run: npm run compile
+
+      - name: Test address string helpers
+        env:
+          HYPC: /tmp/hypc-js/dist/hypc.js
+        run: npm test

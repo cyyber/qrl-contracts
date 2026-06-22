@@ -2,9 +2,16 @@
   "name": "@theqrl/qrl-contracts",
   "description": "Secure Hyperion Smart Contract library for QRL",
   "version": "0.1.0",
+  "scripts": {
+    "compile": "sh scripts/compile-hyperion.sh",
+    "test": "node scripts/test-strings-address.js"
+  },
   "files": [
     "**/*.hyp",
     "/build/contracts/*.json",
+    "scripts/compile-hyperion.sh",
+    "scripts/test-strings-address.js",
+    "test/**/*.hyp",
     "!/mocks/**/*"
   ],
   "repository": {
