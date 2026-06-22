@@ -96,26 +96,22 @@ library Strings {
         return string(buffer);
     }
 
-    // 64B-aware variant — uint256 only holds 32 bytes so a post-quantum
-    // address (64B / 512b) cannot round-trip through it without truncation.
-    // Distinct name avoids ambiguous overload resolution against uint256
-    // (which implicitly widens to uint512).
-    function toHexStringWide(uint512 value, uint256 length) internal pure returns (string memory) {
-        uint512 localValue = value;
-        bytes memory buffer = new bytes(2 * length + 1);
+    function _toAddressString(address addr) private pure returns (string memory) {
+        uint512 localValue = uint512(addr);
+        bytes memory buffer = new bytes(2 * ADDRESS_LENGTH + 1);
         buffer[0] = "Q";
-        for (uint256 i = 2 * length; i > 0; --i) {
+        for (uint256 i = 2 * ADDRESS_LENGTH; i > 0; --i) {
             buffer[i] = HEX_DIGITS[uint256(localValue & 0xf)];
             localValue >>= 4;
         }
         if (localValue != 0) {
-            revert StringsInsufficientHexLength(uint256(localValue), length);
+            revert StringsInsufficientHexLength(uint256(localValue), ADDRESS_LENGTH);
         }
         return string(buffer);
     }
 
     function toHexString(address addr) internal pure returns (string memory) {
-        return toHexStringWide(uint512(addr), ADDRESS_LENGTH);
+        return _toAddressString(addr);
     }
 
     /**
