@@ -102,10 +102,9 @@ library Strings {
     // (which implicitly widens to uint512).
     function toHexStringWide(uint512 value, uint256 length) internal pure returns (string memory) {
         uint512 localValue = value;
-        bytes memory buffer = new bytes(2 * length + 2);
-        buffer[0] = "0";
-        buffer[1] = "x";
-        for (uint256 i = 2 * length + 1; i > 1; --i) {
+        bytes memory buffer = new bytes(2 * length + 1);
+        buffer[0] = "Q";
+        for (uint256 i = 2 * length; i > 0; --i) {
             buffer[i] = HEX_DIGITS[uint256(localValue & 0xf)];
             localValue >>= 4;
         }
@@ -120,7 +119,7 @@ library Strings {
     }
 
     /**
-     * @dev Canonical hex representation of a 64-byte address (128 lowercase hex chars).
+     * @dev Canonical QRL text representation of a 64-byte address (`Q` followed by 128 lowercase hex chars).
      *      QRL addresses do not embed an EIP-55/QIP-55 mixed-case checksum.
      */
     function toChecksumHexString(address addr) internal pure returns (string memory) {
@@ -367,12 +366,8 @@ library Strings {
     ) private pure returns (bool success, uint512 value) {
         bytes memory buffer = bytes(input);
 
-        // skip 0x prefix if present
-        bool hasPrefix = (end > begin + 1) && bytes2(_unsafeReadBytesOffset(buffer, begin)) == bytes2("0x"); // don't do out-of-bound (possibly unsafe) read if sub-string is empty
-        uint256 offset = hasPrefix.toUint() * 2;
-
         uint512 result = 0;
-        for (uint256 i = begin + offset; i < end; ++i) {
+        for (uint256 i = begin; i < end; ++i) {
             uint8 chr = _tryParseChr(bytes1(_unsafeReadBytesOffset(buffer, i)));
             if (chr > 15) return (false, 0);
             result *= 16;
@@ -386,10 +381,10 @@ library Strings {
     }
 
     /**
-     * @dev Parse a hexadecimal string (with or without "0x" prefix), and returns the value as an `address`.
+     * @dev Parse a QRL address string and returns the value as an `address`.
      *
      * Requirements:
-     * - The string must be formatted as `(0x)?[0-9a-fA-F]{128}`
+     * - The string must be formatted as `Q[0-9a-fA-F]{128}`
      */
     function parseAddress(string memory input) internal pure returns (address) {
         return parseAddress(input, 0, bytes(input).length);
@@ -400,7 +395,7 @@ library Strings {
      * `end` (excluded).
      *
      * Requirements:
-     * - The substring must be formatted as `(0x)?[0-9a-fA-F]{128}`
+     * - The substring must be formatted as `Q[0-9a-fA-F]{128}`
      */
     function parseAddress(string memory input, uint256 begin, uint256 end) internal pure returns (address) {
         (bool success, address value) = tryParseAddress(input, begin, end);
@@ -427,13 +422,14 @@ library Strings {
     ) internal pure returns (bool success, address value) {
         if (end > bytes(input).length || begin > end) return (false, address(0));
 
-        bool hasPrefix = (end > begin + 1) && bytes2(_unsafeReadBytesOffset(bytes(input), begin)) == bytes2("0x"); // don't do out-of-bound (possibly unsafe) read if sub-string is empty
-        uint256 expectedLength = ADDRESS_LENGTH * 2 + hasPrefix.toUint() * 2;
+        uint256 expectedLength = ADDRESS_LENGTH * 2 + 1;
 
         // check that input is the correct length
         if (end - begin == expectedLength) {
+            if (bytes1(_unsafeReadBytesOffset(bytes(input), begin)) != bytes1("Q")) return (false, address(0));
+
             // length guarantees that this does not overflow, and value is at most type(uint512).max
-            (bool s, uint512 v) = _tryParseHexUint512UncheckedBounds(input, begin, end);
+            (bool s, uint512 v) = _tryParseHexUint512UncheckedBounds(input, begin + 1, end);
             return (s, address(v));
         } else {
             return (false, address(0));

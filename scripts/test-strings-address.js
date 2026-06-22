@@ -51,12 +51,13 @@ function compileHarness() {
     [
       'checksumAliasMatchesHex',
       'parseCanonicalLowercase',
-      'parseLowercaseNoPrefix',
       'parseUppercaseHex',
+      'rejectBareHex',
       'roundTripCanonical',
       'rejectInvalidCharacter',
       'rejectShortAddress',
-      'rejectUppercasePrefix'
+      'rejectLowercasePrefix',
+      'rejectOxPrefix'
     ].forEach((name) => assert(functions.has(name), `missing ABI function ${name}`));
   } finally {
     fs.rmSync(outDir, { recursive: true, force: true });
@@ -64,13 +65,14 @@ function compileHarness() {
 }
 
 function parseAddress(input) {
-  const hasPrefix = input.startsWith('0x');
-  const body = hasPrefix ? input.slice(2) : input;
+  if (!input.startsWith('Q')) return { success: false, value: null };
+
+  const body = input.slice(1);
 
   if (body.length !== addressHexLength) return { success: false, value: null };
   if (!/^[0-9a-fA-F]+$/.test(body)) return { success: false, value: null };
 
-  return { success: true, value: `0x${body.toLowerCase()}` };
+  return { success: true, value: `Q${body.toLowerCase()}` };
 }
 
 function assertRoundTrip(input) {
@@ -81,17 +83,19 @@ function assertRoundTrip(input) {
 
 compileHarness();
 
-const zero = `0x${'0'.repeat(addressHexLength)}`;
-const max = `0x${'f'.repeat(addressHexLength)}`;
-const mixed = `0x${'0123456789abcdef'.repeat(8)}`;
-const uppercaseHex = `0x${mixed.slice(2).toUpperCase()}`;
+const zero = `Q${'0'.repeat(addressHexLength)}`;
+const max = `Q${'f'.repeat(addressHexLength)}`;
+const mixed = `Q${'0123456789abcdef'.repeat(8)}`;
+const uppercaseHex = `Q${mixed.slice(1).toUpperCase()}`;
 
-[zero, max, mixed, uppercaseHex, mixed.slice(2)].forEach(assertRoundTrip);
+[zero, max, mixed, uppercaseHex].forEach(assertRoundTrip);
 
 assert.deepStrictEqual(parseAddress(uppercaseHex), { success: true, value: mixed });
-assert.strictEqual(parseAddress(`0X${mixed.slice(2)}`).success, false);
-assert.strictEqual(parseAddress(`0x${'0'.repeat(addressHexLength - 1)}`).success, false);
-assert.strictEqual(parseAddress(`0x${'0'.repeat(addressHexLength + 1)}`).success, false);
-assert.strictEqual(parseAddress(`0x${'0'.repeat(addressHexLength - 1)}g`).success, false);
+assert.strictEqual(parseAddress(mixed.slice(1)).success, false);
+assert.strictEqual(parseAddress(`q${mixed.slice(1)}`).success, false);
+assert.strictEqual(parseAddress(`0x${mixed.slice(1)}`).success, false);
+assert.strictEqual(parseAddress(`Q${'0'.repeat(addressHexLength - 1)}`).success, false);
+assert.strictEqual(parseAddress(`Q${'0'.repeat(addressHexLength + 1)}`).success, false);
+assert.strictEqual(parseAddress(`Q${'0'.repeat(addressHexLength - 1)}g`).success, false);
 
 console.log('Strings address parse/format tests passed');
